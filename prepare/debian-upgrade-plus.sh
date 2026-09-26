@@ -1,12 +1,22 @@
+```bash
 #!/usr/bin/env bash
 
 # ============================================================
-# Kali Restore v 2.4
+# Kali Restore
 # Author: jumper-hash
-# Run: chmod +x kali-restore.sh && sudo ./kali-restore.sh <username>
+#
+# Run:
+#   chmod +x kali-restore.sh
+#   sudo ./kali-restore.sh <username>
+#
+# This script installs the pentesting layer globally.
+# Base system, KDE, XRDP, Docker and desktop themes are handled
+# by the separate upgrade.sh script.
 # ============================================================
 
 set -euo pipefail
+
+export DEBIAN_FRONTEND=noninteractive
 
 if [[ $# -ne 1 ]]; then
     echo "Usage: $0 <username>"
@@ -20,6 +30,11 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
+if ! [[ "$Username" =~ ^[a-z_][a-z0-9_-]*[$]?$ ]]; then
+    echo "Invalid username: $Username"
+    exit 1
+fi
+
 if ! id "$Username" >/dev/null 2>&1; then
     echo "User '$Username' does not exist."
     exit 1
@@ -28,12 +43,37 @@ fi
 USER_HOME="$(getent passwd "$Username" | cut -d: -f6)"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 TOOLS_DIR="${SCRIPT_DIR}/tools"
 STAGE_DIR="${TOOLS_DIR}/staging"
-DATE_TAG="$(date +%Y%m%d)"
-LOGFILE="${TOOLS_DIR}/kali-restore-${DATE_TAG}.log"
 
-mkdir -p "$TOOLS_DIR" "$STAGE_DIR"
+DATE_TAG="$(date +%Y%m%d)"
+
+LOGFILE="${TOOLS_DIR}/kali-restore-${DATE_TAG}.log"
+APT_FAILED="${TOOLS_DIR}/apt-failed-${DATE_TAG}.txt"
+MISSING_TOOLS="${TOOLS_DIR}/missing-${DATE_TAG}.txt"
+
+mkdir -p \
+    "$TOOLS_DIR" \
+    "$STAGE_DIR"
+
+touch \
+    "$LOGFILE" \
+    "$APT_FAILED" \
+    "$MISSING_TOOLS"
+
+chown \
+    "$Username:$Username" \
+    "$TOOLS_DIR" \
+    "$STAGE_DIR" \
+    "$LOGFILE" \
+    "$APT_FAILED" \
+    "$MISSING_TOOLS"
+
+
+# ============================================================
+# COLORS
+# ============================================================
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -63,78 +103,376 @@ info() {
 # ============================================================
 
 install_apt_pkgs() {
+
     log "Updating package lists..."
-    apt update -qq
+
+    apt-get update -qq
+
 
     local -a apt_pkgs=(
-        enum4linux
+
+        # =========================
+        # Network reconnaissance
+        # =========================
+        nmap
+        ncat
+        netcat-openbsd
+        socat
+        masscan
+        hping3
+        fping
+        arp-scan
+        traceroute
+        mtr-tiny
+        dnsutils
+        whois
+        sslscan
+        openssl
+        gnutls-bin
+        swaks
+        nbtscan
+        onesixtyone
+        snmp
+        snmp-mibs-downloader
+        sipvicious
+
+        # =========================
+        # SMB / Windows / AD
+        # =========================
         smbclient
+        samba-common-bin
         smbmap
+        enum4linux
+        enum4linux-ng
         impacket-scripts
         bloodhound
-        chisel
-        ligolo-ng
+        ldap-utils
+        rpcbind
+        krb5-user
+        krb5-config
+        sshpass
+        evil-winrm
+
+        # =========================
+        # Web reconnaissance
+        # =========================
         ffuf
         gobuster
+        feroxbuster
         dirb
+        dirsearch
         nikto
         wpscan
-        evil-winrm
+        whatweb
+        sqlmap
+        commix
+        zaproxy
+
+        # =========================
+        # Password attacks / cracking
+        # =========================
         hydra
+        hydra-gtk
         john
         hashcat
+        crunch
+        hashid
+        hcxtools
+        hcxdumptool
+        patator
+
+        # =========================
+        # Exploitation
+        # =========================
         metasploit-framework
-        sqlmap
-        burpsuite
-        wireshark
+        exploitdb
+
+        # =========================
+        # MITM / network attacks
+        # =========================
         responder
         mitm6
         bettercap
-        exploitdb
-        jq
-        netcat-openbsd
-        ncat
+        ettercap-text-only
+        ettercap-graphical
+        dsniff
+        mitmproxy
+
+        # =========================
+        # Proxying / tunneling
+        # =========================
+        proxychains4
+        torsocks
+        chisel
+        ligolo-ng
+        sshuttle
+        wireguard-tools
+        openvpn
+
+        # =========================
+        # Packet capture / analysis
+        # =========================
+        tcpdump
+        wireshark
+        tshark
+        termshark
+
+        # =========================
+        # Terminal / workflow
+        # =========================
         tmux
         rlwrap
         xclip
-        bat
+        xsel
         fzf
-        pipx
+        bat
+        ripgrep
+        fd-find
+        tree
+        less
+        vim
+        nano
+
+        # =========================
+        # Python environment
+        # =========================
+        python3
+        python3-pip
+        python3-venv
+        python3-dev
+        python3-setuptools
+        python3-wheel
+
+        # =========================
+        # Build environment
+        # =========================
+        build-essential
+        gcc
+        g++
+        gcc-multilib
+        make
+        cmake
+        pkg-config
+        libssl-dev
+        libffi-dev
+        libxml2-dev
+        libxslt1-dev
+        zlib1g-dev
+
+        # =========================
+        # Binary exploitation
+        # =========================
+        gdb
+        gdb-multiarch
+        gdbserver
+        binutils
+        binutils-multiarch
+        patchelf
+        checksec
+        strace
+        ltrace
+        lsof
+        procps
+        psmisc
+
+        # =========================
+        # Binary / file analysis
+        # =========================
+        file
+        p7zip-full
+        unzip
+        zip
+        xxd
+        libimage-exiftool-perl
+        binwalk
+        foremost
+        sleuthkit
+        testdisk
+        yara
+
+        # =========================
+        # Data processing
+        # =========================
+        jq
+        yq
+        sqlite3
+
+        # =========================
+        # Remote access / transfer
+        # =========================
+        openssh-client
+        rsync
+        curl
+        wget
+        ftp
+        telnet
+
+        # =========================
+        # Database clients
+        # =========================
+        default-mysql-client
+        postgresql-client
+        redis-tools
+
+        # =========================
+        # Web / scripting runtimes
+        # =========================
+        nodejs
+        npm
+        ruby
+        ruby-dev
+        php-cli
+        php-curl
+        php-xml
+        php-mbstring
+
+        # =========================
+        # Cloud / misc.
+        # =========================
+        awscli
+
+        # =========================
+        # Go toolchain
+        # =========================
+        golang-go
+
+        # =========================
+        # Reverse engineering
+        # =========================
+        ghidra
+        radare2
+
+        # =========================
+        # Wordlists
+        # =========================
+        wordlists
     )
+
 
     local success=0
     local fail=0
 
+
+    : > "$APT_FAILED"
+
+
     for pkg in "${apt_pkgs[@]}"; do
-        if apt install -y "$pkg" &>> "$LOGFILE"; then
+
+        if apt-get install -y "$pkg" >>"$LOGFILE" 2>&1; then
+
             ((++success))
+
         else
-            warn "Package '$pkg' not available or failed to install — skipping."
+
+            warn \
+                "Package '$pkg' unavailable or failed to install — skipping."
+
+            printf '%s\n' \
+                "$pkg" \
+                >> "$APT_FAILED"
+
             ((++fail))
+
         fi
+
     done
 
-    log "APT packages: $success installed, $fail skipped."
+
+    log \
+        "APT packages: $success installed, $fail skipped."
+
 }
 
 
 # ============================================================
-# PIP TOOLS
+# GLOBAL PYTHON TOOLS
 # ============================================================
 
 install_pip_tools() {
-    log "Installing Python tools..."
 
-    python3 -m pip install \
+    log "Installing global Python security tools..."
+
+
+    local -a pip_pkgs=(
+
+        # =========================
+        # Active Directory
+        # =========================
+        bloodhound
+        ldapdomaindump
+        certipy-ad
+        bloodyAD
+        pywhisker
+        adidnsdump
+        minikerberos
+
+        # =========================
+        # LDAP / DNS / Kerberos
+        # =========================
+        ldap3
+        dnspython
+
+        # =========================
+        # Web / fuzzing
+        # =========================
+        wfuzz
+        arjun
+        requests
+        beautifulsoup4
+
+        # =========================
+        # Exploit development
+        # =========================
+        pwntools
+        ROPGadget
+
+        # =========================
+        # SMB / Windows
+        # =========================
+        impacket
+    )
+
+
+    if python3 -m pip install \
         --break-system-packages \
-        bloodhound \
-        ldapdomaindump \
-        wfuzz \
-        arjun \
-        2>&1 | tee -a "$LOGFILE" \
-        || warn "Some Python packages failed — check the log."
+        "${pip_pkgs[@]}" \
+        >> "$LOGFILE" 2>&1; then
 
-    log "Python tools installation finished."
+        log "Python security tools installed."
+
+    else
+
+        warn \
+            "Some Python packages failed — check $LOGFILE."
+
+    fi
+
+}
+
+
+# ============================================================
+# NETEXEC
+# ============================================================
+
+install_netexec() {
+
+    log "Installing NetExec globally..."
+
+
+    if python3 -m pip install \
+        --break-system-packages \
+        "git+https://github.com/Pennyw0rth/NetExec.git" \
+        >> "$LOGFILE" 2>&1; then
+
+        log "NetExec installed globally."
+
+    else
+
+        warn \
+            "NetExec installation failed — check $LOGFILE."
+
+    fi
+
 }
 
 
@@ -143,41 +481,187 @@ install_pip_tools() {
 # ============================================================
 
 install_kerbrute() {
+
     log "Installing Kerbrute..."
 
-    local kerb_url="https://github.com/ropnop/kerbrute/releases/latest/download/kerbrute_linux_amd64"
-    local kerb_fallback="https://github.com/ropnop/kerbrute/releases/download/v1.0.3/kerbrute_linux_amd64"
-    local kerb_bin="/usr/local/bin/kerbrute"
 
-    if [[ -x "$kerb_bin" ]]; then
-        info "Kerbrute already installed at $kerb_bin."
+    local architecture
+    local asset
+    local temporary
+
+
+    architecture="$(dpkg --print-architecture)"
+
+
+    case "$architecture" in
+
+        amd64)
+            asset="kerbrute_linux_amd64"
+            ;;
+
+        arm64)
+            asset="kerbrute_linux_arm64"
+            ;;
+
+        *)
+            warn \
+                "Kerbrute is not configured for architecture: $architecture"
+
+            return
+            ;;
+
+    esac
+
+
+    if [[ -x /usr/local/bin/kerbrute ]]; then
+
+        info \
+            "Kerbrute already installed."
+
+        return
+
+    fi
+
+
+    temporary="$(mktemp)"
+
+
+    if curl -fsSL \
+        --retry 3 \
+        -o "$temporary" \
+        "https://github.com/ropnop/kerbrute/releases/latest/download/$asset"; then
+
+        install \
+            -m 0755 \
+            "$temporary" \
+            /usr/local/bin/kerbrute
+
+        rm -f \
+            "$temporary"
+
+        log "Kerbrute installed."
+
     else
-        if wget -q -O /tmp/kerbrute_linux_amd64 "$kerb_url"; then
-            chmod +x /tmp/kerbrute_linux_amd64
-            mv /tmp/kerbrute_linux_amd64 "$kerb_bin"
-            log "Kerbrute installed."
-        elif wget -q -O /tmp/kerbrute_linux_amd64 "$kerb_fallback"; then
-            chmod +x /tmp/kerbrute_linux_amd64
-            mv /tmp/kerbrute_linux_amd64 "$kerb_bin"
-            log "Kerbrute v1.0.3 installed."
+
+        rm -f \
+            "$temporary"
+
+        warn \
+            "Kerbrute download failed."
+
+    fi
+
+}
+
+
+# ============================================================
+# EVIL-WINRM FALLBACK
+# ============================================================
+
+install_evil_winrm_fallback() {
+
+    if command -v evil-winrm >/dev/null 2>&1; then
+
+        info "Evil-WinRM is already available."
+
+        return
+
+    fi
+
+
+    log "Trying Evil-WinRM RubyGems fallback..."
+
+
+    if ! command -v gem >/dev/null 2>&1; then
+
+        warn \
+            "RubyGems is unavailable — Evil-WinRM fallback skipped."
+
+        return
+
+    fi
+
+
+    if gem install \
+        evil-winrm \
+        --no-document \
+        >> "$LOGFILE" 2>&1; then
+
+        log \
+            "Evil-WinRM installed through RubyGems."
+
+    else
+
+        warn \
+            "Evil-WinRM fallback installation failed."
+
+    fi
+
+}
+
+
+# ============================================================
+# GO TOOLS
+# ============================================================
+
+install_go_tools() {
+
+    if ! command -v go >/dev/null 2>&1; then
+
+        warn \
+            "Go is unavailable — skipping Go-based tools."
+
+        return
+
+    fi
+
+
+    log \
+        "Installing Go-based reconnaissance tools globally..."
+
+
+    local -a go_tools=(
+
+        # ProjectDiscovery
+        github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
+        github.com/projectdiscovery/httpx/cmd/httpx@latest
+        github.com/projectdiscovery/dnsx/cmd/dnsx@latest
+        github.com/projectdiscovery/naabu/v2/cmd/naabu@latest
+        github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
+        github.com/projectdiscovery/katana/cmd/katana@latest
+
+        # Tomnomnom ecosystem
+        github.com/tomnomnom/waybackurls@latest
+        github.com/tomnomnom/anew@latest
+        github.com/tomnomnom/qsreplace@latest
+
+        # Other enumeration
+        github.com/lc/gau/v2/cmd/gau@latest
+        github.com/hakluke/hakrawler@latest
+    )
+
+
+    local tool
+
+
+    for tool in "${go_tools[@]}"; do
+
+        if GOBIN=/usr/local/bin \
+            go install "$tool" \
+            >> "$LOGFILE" 2>&1; then
+
+            info \
+                "Installed $(basename "${tool%@*}")."
+
         else
-            warn "Failed to download Kerbrute."
+
+            warn \
+                "Failed to install $tool."
+
         fi
-    fi
 
-    log "Installing latest NetExec through pipx..."
+    done
 
-    if command -v pipx >/dev/null 2>&1; then
-        pipx ensurepath >/dev/null 2>&1 || true
-
-        pipx install \
-            git+https://github.com/Pennyw0rth/NetExec \
-            --force \
-            2>&1 | tee -a "$LOGFILE" \
-            || warn "NetExec installation failed."
-    else
-        warn "pipx not available — NetExec skipped."
-    fi
 }
 
 
@@ -185,19 +669,78 @@ install_kerbrute() {
 # ROCKYOU
 # ============================================================
 
-extract_rockyou() {
-    local rock="/usr/share/wordlists/rockyou.txt.gz"
+install_wordlists() {
 
-    if [[ -f "$rock" ]]; then
-        if [[ ! -f "/usr/share/wordlists/rockyou.txt" ]]; then
-            log "Extracting rockyou.txt..."
-            gunzip -k "$rock"
-        else
-            info "rockyou.txt already extracted."
-        fi
-    else
-        warn "rockyou.txt.gz not found. Skipping."
+    local rockyou_gz="/usr/share/wordlists/rockyou.txt.gz"
+    local rockyou_txt="/usr/share/wordlists/rockyou.txt"
+
+
+    if [[ -f "$rockyou_txt" ]]; then
+
+        info \
+            "rockyou.txt already exists."
+
+        return
+
     fi
+
+
+    if [[ -f "$rockyou_gz" ]]; then
+
+        log \
+            "Extracting rockyou.txt..."
+
+        gunzip -k \
+            "$rockyou_gz"
+
+    else
+
+        warn \
+            "rockyou.txt.gz not available in the configured repositories."
+
+    fi
+
+}
+
+
+# ============================================================
+# REPOSITORY HELPER
+# ============================================================
+
+clone_repo() {
+
+    local url="$1"
+    local destination="$2"
+
+
+    if [[ -d "$destination/.git" ]]; then
+
+        info \
+            "$(basename "$destination") already exists — updating..."
+
+        git -C "$destination" pull --ff-only \
+            >> "$LOGFILE" 2>&1 \
+            || warn \
+                "Failed to update $destination."
+
+    else
+
+        log \
+            "Cloning $(basename "$destination")..."
+
+        rm -rf \
+            "$destination"
+
+        git clone \
+            --depth 1 \
+            "$url" \
+            "$destination" \
+            >> "$LOGFILE" 2>&1 \
+            || warn \
+                "Failed to clone $url."
+
+    fi
+
 }
 
 
@@ -206,345 +749,31 @@ extract_rockyou() {
 # ============================================================
 
 clone_tools() {
-    mkdir -p "$TOOLS_DIR" "$STAGE_DIR"
-    cd "$TOOLS_DIR"
 
-    if [[ ! -d PEASS-ng/.git ]]; then
-        log "Cloning PEASS-ng..."
-        git clone --depth 1 \
-            https://github.com/peass-ng/PEASS-ng.git
-    else
-        info "PEASS-ng exists — updating..."
-        git -C PEASS-ng pull
-    fi
+    log \
+        "Preparing pentesting repositories..."
 
-    log "Downloading LinPEAS.sh..."
-    wget -q -O linpeas.sh \
-        "https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh" \
-        2>/dev/null \
-        && chmod +x linpeas.sh \
-        || warn "Failed to download linpeas.sh."
 
-    log "Downloading winPEASx64.exe..."
-    wget -q -O winPEASx64.exe \
-        "https://github.com/peass-ng/PEASS-ng/releases/latest/download/winPEASx64.exe" \
-        2>/dev/null \
-        || warn "Failed to download winPEASx64.exe."
+    # =========================
+    # Privilege escalation
+    # =========================
 
-    log "Downloading winPEASx86.exe..."
-    wget -q -O winPEASx86.exe \
-        "https://github.com/peass-ng/PEASS-ng/releases/latest/download/winPEASx86.exe" \
-        2>/dev/null \
-        || warn "Failed to download winPEASx86.exe."
+    clone_repo \
+        "https://github.com/peass-ng/PEASS-ng.git" \
+        "$TOOLS_DIR/PEASS-ng"
 
 
-    if [[ -d /usr/share/seclists ]]; then
-        info "SecLists already exists at /usr/share/seclists — skipping clone."
-    else
-        log "Cloning SecLists..."
-        git clone --depth 1 \
-            https://github.com/danielmiessler/SecLists.git \
-            /usr/share/seclists
-    fi
+    clone_repo \
+        "https://github.com/rebootuser/LinEnum.git" \
+        "$TOOLS_DIR/LinEnum"
 
 
-    if [[ ! -d PayloadsAllTheThings/.git ]]; then
-        log "Cloning PayloadsAllTheThings..."
-        git clone --depth 1 \
-            https://github.com/swisskyrepo/PayloadsAllTheThings.git
-    else
-        info "PayloadsAllTheThings exists — updating..."
-        git -C PayloadsAllTheThings pull
-    fi
+    clone_repo \
+        "https://github.com/diego-treitos/linux-smart-enumeration.git" \
+        "$TOOLS_DIR/linux-smart-enumeration"
 
 
-    if [[ ! -d LinEnum/.git ]]; then
-        log "Cloning LinEnum..."
-        git clone --depth 1 \
-            https://github.com/rebootuser/LinEnum.git
-    fi
-
-
-    if [[ ! -d linux-smart-enumeration/.git ]]; then
-        log "Cloning linux-smart-enumeration..."
-        git clone --depth 1 \
-            https://github.com/diego-treitos/linux-smart-enumeration.git
-    fi
-
-
-    if [[ ! -d linux-exploit-suggester/.git ]]; then
-        log "Cloning Linux Exploit Suggester..."
-        git clone --depth 1 \
-            https://github.com/The-Z-Labs/linux-exploit-suggester.git
-    else
-        info "Linux Exploit Suggester exists — updating..."
-        git -C linux-exploit-suggester pull
-    fi
-
-
-    if [[ ! -d pspy/.git ]]; then
-        log "Cloning pspy..."
-        git clone --depth 1 \
-            https://github.com/DominicBreuker/pspy.git
-    fi
-
-
-    if [[ ! -d wesng/.git ]]; then
-        log "Cloning WES-NG..."
-        git clone --depth 1 \
-            https://github.com/bitsadmin/wesng.git
-    fi
-
-
-    if [[ ! -d PowerSploit/.git ]]; then
-        log "Cloning PowerSploit..."
-        git clone --depth 1 \
-            https://github.com/PowerShellMafia/PowerSploit.git
-    fi
-
-
-    if [[ ! -d PKINITtools/.git ]]; then
-        log "Cloning PKINITtools..."
-        git clone --depth 1 \
-            https://github.com/dirkjanm/PKINITtools.git
-    fi
-
-
-    if [[ ! -d fuzzdb/.git ]]; then
-        log "Cloning fuzzdb..."
-        git clone --depth 1 \
-            https://github.com/fuzzdb-project/fuzzdb.git
-    fi
-
-
-    if [[ ! -d IntruderPayloads/.git ]]; then
-        log "Cloning IntruderPayloads..."
-        git clone --depth 1 \
-            https://github.com/1N3/IntruderPayloads.git
-    fi
-
-
-    if [[ ! -d static-binaries/.git ]]; then
-        log "Cloning static-binaries..."
-        git clone --depth 1 \
-            https://github.com/andrew-d/static-binaries.git
-    fi
-
-
-    if [[ ! -d SUID3NUM/.git ]]; then
-        log "Cloning SUID3NUM..."
-        git clone --depth 1 \
-            https://github.com/Anon-Exploiter/SUID3NUM.git
-    fi
-
-    chown -R "$Username:$Username" "$TOOLS_DIR"
-
-    log "Tools cloned to: $TOOLS_DIR"
-}
-
-
-# ============================================================
-# PSPY BINARIES
-# ============================================================
-
-download_static_bins() {
-    local psdir="${TOOLS_DIR}/pspy"
-
-    if [[ ! -d "$psdir" ]]; then
-        return
-    fi
-
-    log "Downloading precompiled pspy binaries..."
-
-    cd "$psdir"
-
-    for arch in amd64 arm64; do
-        wget -q -O "pspy64_${arch}" \
-            "https://github.com/DominicBreuker/pspy/releases/latest/download/pspy64_${arch}" \
-            2>/dev/null \
-            || true
-
-        chmod +x "pspy64_${arch}" 2>/dev/null || true
-    done
-
-    cd "$SCRIPT_DIR"
-}
-
-
-# ============================================================
-# ZSH ALIASES
-# ============================================================
-
-configure_shell_aliases() {
-    local shell_d="${USER_HOME}/.zshrc.d"
-    local commands_file="${shell_d}/commands"
-    local shell_rc="${USER_HOME}/.zshrc"
-
-    log "Configuring Zsh aliases..."
-
-    mkdir -p "$shell_d"
-
-    cat > "$commands_file" <<EOF
-alias htb='cd ${USER_HOME}/Desktop/htb'
-alias hs='sudo nano /etc/hosts'
-alias nmap-all='sudo nmap -p- -sV -sC -O -T4'
-alias enum4='enum4linux -a'
-alias smb='smbclient -L \\\\\\\\'
-alias mkdir='mkdir -p'
-alias ll='ls -lah'
-alias la='ls -A'
-alias l='ls -CF'
-EOF
-
-    chown "$Username:$Username" "$commands_file"
-    chmod 644 "$commands_file"
-
-    if [[ ! -f "$shell_rc" ]]; then
-        touch "$shell_rc"
-    fi
-
-    if ! grep -qF 'for f in ~/.zshrc.d/*' "$shell_rc"; then
-        cat >> "$shell_rc" <<'EOF'
-
-for f in ~/.zshrc.d/*; do
-    [[ -f "$f" ]] && source "$f"
-done
-EOF
-    fi
-
-    chown "$Username:$Username" "$shell_rc"
-
-    log "Aliases saved to $commands_file."
-}
-
-
-# ============================================================
-# CONVENIENCE SYMLINKS
-# ============================================================
-
-post_install_symlinks() {
-    log "Creating convenience links..."
-
-    mkdir -p "${TOOLS_DIR}/bin"
-
-    ln -sf \
-        "${TOOLS_DIR}/linpeas.sh" \
-        "${TOOLS_DIR}/bin/linpeas"
-
-    if [[ -d /usr/share/seclists ]]; then
-        ln -sfn \
-            /usr/share/seclists \
-            "${TOOLS_DIR}/seclists-link"
-    fi
-}
-
-
-# ============================================================
-# SUMMARY
-# ============================================================
-
-summary() {
-    cat <<EOF
-
-============================================================
-KALI RESTORE COMPLETED
-============================================================
-
-User:
-  ${Username}
-
-Tools directory:
-  ${TOOLS_DIR}
-
-APT tools:
-  enum4linux
-  smbclient
-  smbmap
-  impacket-scripts
-  bloodhound
-  ffuf
-  gobuster
-  dirb
-  nikto
-  wpscan
-  evil-winrm
-  hydra
-  john
-  hashcat
-  metasploit-framework
-  sqlmap
-  burpsuite
-  wireshark
-  responder
-  mitm6
-  bettercap
-  exploitdb
-  jq
-  netcat
-  tmux
-  rlwrap
-  xclip
-  bat
-  fzf
-
-Python tools:
-  bloodhound
-  ldapdomaindump
-  wfuzz
-  arjun
-
-Additional:
-  NetExec
-  Kerbrute
-
-Repositories:
-  PEASS-ng
-  SecLists
-  PayloadsAllTheThings
-  LinEnum
-  linux-smart-enumeration
-  Linux Exploit Suggester
-  pspy
-  WES-NG
-  PowerSploit
-  PKINITtools
-  fuzzdb
-  IntruderPayloads
-  static-binaries
-  SUID3NUM
-
-Shell:
-  ~/.zshrc.d/commands
-
-Log:
-  ${LOGFILE}
-
-============================================================
-
-EOF
-}
-
-
-# ============================================================
-# MAIN
-# ============================================================
-
-echo ""
-info "============================================"
-info " Kali Restore v2.4"
-info " User      : ${Username}"
-info " Tools dir : ${TOOLS_DIR}"
-info "============================================"
-echo ""
-
-install_apt_pkgs
-install_pip_tools
-install_kerbrute
-extract_rockyou
-clone_tools
-download_static_bins
-configure_shell_aliases
-post_install_symlinks
-summary
-
-log "Done."
+    clone_repo \
+        "https://github.com/The-Z-Labs/linux-exploit-suggester.git" \
+        "$TOOLS_DIR/linux_
+```
