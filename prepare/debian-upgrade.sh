@@ -21,6 +21,7 @@ fi
 
 echo ">>> Konfiguracja dla użytkownika: $Username"
 
+
 # ============================================================
 # 1. BASE SYSTEM + ZSH + SUDO
 # ============================================================
@@ -33,9 +34,10 @@ apt install -y \
     git \
     ca-certificates \
     curl \
+    wget \
     locales
 
-if id "$Username" &>/dev/null; then
+if id "$Username" >/dev/null 2>&1; then
     echo "Użytkownik $Username już istnieje"
 else
     adduser "$Username"
@@ -57,12 +59,6 @@ visudo -c
 # ============================================================
 # 2. DOCKER + DOCKER COMPOSE
 # ============================================================
-
-apt update
-
-apt install -y \
-    ca-certificates \
-    curl
 
 install -m 0755 -d /etc/apt/keyrings
 
@@ -96,22 +92,37 @@ systemctl enable --now docker
 
 
 # ============================================================
-# 3. KDE PLASMA + XRDP
+# 3. DEBIAN BACKPORTS
 # ============================================================
 
+cat > /etc/apt/sources.list.d/debian-backports.sources <<'EOF'
+Types: deb
+URIs: https://deb.debian.org/debian
+Suites: trixie-backports
+Components: main
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+EOF
+
 apt update
+
+
+# ============================================================
+# 4. KDE PLASMA + XRDP + NETWORK
+# ============================================================
 
 apt install -y \
     kde-plasma-desktop \
     plasma-desktop \
     plasma-workspace \
+    plasma-nm \
     kwin-x11 \
     xorg \
     xserver-xorg \
-    xrdp \
-    xorgxrdp \
+    xrdp/trixie-backports \
+    xorgxrdp/trixie-backports \
     dbus-x11 \
-    sddm
+    sddm \
+    network-manager
 
 cat > "$USER_HOME/.xsession" <<EOF
 exec startplasma-x11
@@ -120,23 +131,23 @@ EOF
 chown "$Username:$Username" "$USER_HOME/.xsession"
 chmod 644 "$USER_HOME/.xsession"
 
-systemctl enable sddm
+systemctl enable --now NetworkManager
+systemctl enable --now sddm
 systemctl enable --now xrdp
 
 
 # ============================================================
-# 4. FIREFOX + TILIX + FONT
+# 5. FIREFOX + TILIX + FONT
 # ============================================================
 
 apt install -y \
     firefox-esr \
     tilix \
-    dconf-cli \
     fonts-jetbrains-mono
 
 
 # ============================================================
-# 5. XRDP - USTAWIENIA
+# 6. XRDP - USTAWIENIA
 # ============================================================
 
 sed -i \
@@ -150,18 +161,24 @@ sed -i \
     -e 's/^normal_frame_interval=.*/normal_frame_interval=40/' \
     /etc/xrdp/xrdp.ini
 
-sed -i \
-    's/^order = .*/order = [ "RFX","H.264"]/' \
-    /etc/xrdp/gfx.toml
+if [[ -f /etc/xrdp/gfx.toml ]]; then
+    sed -i \
+        's/^order = .*/order = [ "RFX", "H.264" ]/' \
+        /etc/xrdp/gfx.toml
+else
+    echo "Warning: /etc/xrdp/gfx.toml not found; codec order skipped."
+fi
 
 usermod -aG ssl-cert xrdp
 
-chown root:ssl-cert /etc/xrdp/key.pem
-chmod 640 /etc/xrdp/key.pem
+if [[ -e /etc/xrdp/key.pem ]]; then
+    chown root:ssl-cert /etc/xrdp/key.pem
+    chmod 640 /etc/xrdp/key.pem
+fi
 
 
 # ============================================================
-# 6. MC SUR KDE
+# 7. MC SUR KDE
 # ============================================================
 
 rm -rf /tmp/McSur-kde
@@ -179,7 +196,7 @@ su - "$Username" -c './install.sh'
 
 
 # ============================================================
-# 7. CATPPUCCIN KDE
+# 8. CATPPUCCIN KDE
 # ============================================================
 
 apt install -y unzip
@@ -188,7 +205,8 @@ rm -rf /tmp/catppuccin-kde
 
 cd /tmp
 
-git clone --depth=1 \
+git clone \
+    --depth=1 \
     https://github.com/catppuccin/kde \
     catppuccin-kde
 
@@ -200,7 +218,7 @@ su - "$Username" -c './install.sh 1 13 2 auto'
 
 
 # ============================================================
-# 8. PURPURNIGHT GLOBAL 6
+# 9. PURPURNIGHT GLOBAL 6
 # ============================================================
 
 PURPUR_ARCHIVE="/tmp/SCsEoa-PurPurNight-Global-6.tar.gz"
@@ -220,6 +238,12 @@ if [[ -f "$PURPUR_ARCHIVE" ]]; then
         "$Username:$Username" \
         "$USER_HOME/.local/share/plasma/look-and-feel"
 
+    su - "$Username" -c \
+        'dbus-run-session -- lookandfeeltool --list | grep -i purpur || true'
+
+    su - "$Username" -c \
+        'dbus-run-session -- lookandfeeltool -a PurPurNight-Global-6 || true'
+
 else
 
     echo "Brak $PURPUR_ARCHIVE - PurPurNight pomijam."
@@ -228,7 +252,7 @@ fi
 
 
 # ============================================================
-# 9. ZSH - USER
+# 10. ZSH - USER
 # ============================================================
 
 if [[ -f "$USER_HOME/.zshrc" ]]; then
@@ -261,7 +285,7 @@ chsh -s /usr/bin/zsh "$Username"
 
 
 # ============================================================
-# 10. ZSH - ROOT
+# 11. ZSH - ROOT
 # ============================================================
 
 if [[ -f /root/.zshrc ]]; then
@@ -292,7 +316,7 @@ chsh -s /usr/bin/zsh root
 
 
 # ============================================================
-# 11. TIMEZONE + FORMAT 24H
+# 12. TIMEZONE + 24H FORMAT
 # ============================================================
 
 if ! grep -q '^pl_PL.UTF-8 UTF-8$' /etc/locale.gen; then
@@ -316,7 +340,8 @@ LC_TIME=pl_PL.UTF-8
 LANGUAGE=en_US
 EOF
 
-chown "$Username:$Username" \
+chown \
+    "$Username:$Username" \
     "$USER_HOME/.config/plasma-localerc"
 
 if [[ -f "$USER_HOME/.profile" ]]; then
@@ -334,11 +359,13 @@ EOF
 
 fi
 
-chown "$Username:$Username" "$USER_HOME/.profile"
+chown \
+    "$Username:$Username" \
+    "$USER_HOME/.profile"
 
 
 # ============================================================
-# 12. TILIX
+# 13. TILIX
 # ============================================================
 
 TILIX_SCRIPT="/tmp/tilix-setup-${Username}.sh"
@@ -415,7 +442,10 @@ gsettings set \
     '<Primary><Shift>Down'
 EOF
 
-chown "$Username:$Username" "$TILIX_SCRIPT"
+chown \
+    "$Username:$Username" \
+    "$TILIX_SCRIPT"
+
 chmod 700 "$TILIX_SCRIPT"
 
 su - "$Username" -c \
@@ -425,17 +455,19 @@ rm -f "$TILIX_SCRIPT"
 
 
 # ============================================================
-# 13. OCHRONA PRZED PRZYPADKOWYM AUTOREMOVE
+# 14. PROTECT CORE PACKAGES FROM AUTOREMOVE
 # ============================================================
 
 apt-mark manual \
     kde-plasma-desktop \
     plasma-desktop \
     plasma-workspace \
+    plasma-nm \
     kwin-x11 \
     xorg \
     xserver-xorg \
     sddm \
+    network-manager \
     xrdp \
     xorgxrdp \
     dbus-x11 \
@@ -450,14 +482,14 @@ apt-mark manual \
 
 
 # ============================================================
-# 14. RESTART XRDP
+# 15. RESTART XRDP
 # ============================================================
 
 systemctl restart xrdp
 
 
 # ============================================================
-# 15. WERYFIKACJA
+# 16. VALIDATION
 # ============================================================
 
 echo
@@ -475,13 +507,20 @@ docker --version
 docker compose version
 
 echo
+echo "===== TIMEZONE ====="
+timedatectl
+
+echo
 echo "===== ZSH ====="
 su - "$Username" -c 'zsh --version'
 su - "$Username" -c 'zsh -lic "echo ZSH_OK"'
 
 echo
-echo "===== TIMEZONE ====="
-timedatectl
+echo "===== PLASMA ====="
+command -v startplasma-x11
+
+dpkg -l | grep -E \
+    '^ii  (kde-plasma-desktop|plasma-desktop|plasma-workspace|plasma-nm|kwin-x11|xorg|sddm|network-manager)'
 
 echo
 echo "===== SDDM ====="
@@ -505,18 +544,18 @@ grep -E \
 
 echo
 echo "===== CODEC ORDER ====="
-grep '^order =' /etc/xrdp/gfx.toml
+
+if [[ -f /etc/xrdp/gfx.toml ]]; then
+    grep '^order =' /etc/xrdp/gfx.toml
+else
+    echo "gfx.toml not present"
+fi
 
 echo
 echo "===== GLOBAL THEMES ====="
-su - "$Username" -c \
-    "lookandfeeltool --list | grep -Ei 'breeze|mcsur|catppuccin|purpur' || true"
 
-echo
-echo "===== PLASMA ====="
-command -v startplasma-x11
-dpkg -l | grep -E \
-    '^ii  (kde-plasma-desktop|plasma-desktop|plasma-workspace|kwin-x11|xorg|sddm)'
+su - "$Username" -c \
+    "dbus-run-session -- lookandfeeltool --list | grep -Ei 'breeze|mcsur|catppuccin|purpur' || true"
 
 echo
 echo "=========================================="
