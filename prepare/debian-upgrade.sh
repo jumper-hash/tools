@@ -21,7 +21,6 @@ fi
 
 echo ">>> Konfiguracja dla użytkownika: $Username"
 
-
 # ============================================================
 # 1. BASE SYSTEM + ZSH + SUDO
 # ============================================================
@@ -132,7 +131,7 @@ chown "$Username:$Username" "$USER_HOME/.xsession"
 chmod 644 "$USER_HOME/.xsession"
 
 systemctl enable --now NetworkManager
-systemctl enable --now sddm
+systemctl enable sddm
 systemctl enable --now xrdp
 
 
@@ -166,7 +165,7 @@ if [[ -f /etc/xrdp/gfx.toml ]]; then
         's/^order = .*/order = [ "RFX", "H.264" ]/' \
         /etc/xrdp/gfx.toml
 else
-    echo "Warning: /etc/xrdp/gfx.toml not found; codec order skipped."
+    echo "Warning: /etc/xrdp/gfx.toml not found; codec configuration skipped."
 fi
 
 usermod -aG ssl-cert xrdp
@@ -186,13 +185,13 @@ rm -rf /tmp/McSur-kde
 cd /tmp
 
 git clone \
-    https://github.com/yeyushengfan258/McSur-kde.git
+    https://github.com/yeyushengfan258/McSur-kde.git \
+    /tmp/McSur-kde
 
-cd /tmp/McSur-kde
+chmod +x /tmp/McSur-kde/install.sh
 
-chmod +x install.sh
-
-su - "$Username" -c './install.sh'
+su - "$Username" -c \
+    'cd /tmp/McSur-kde && ./install.sh'
 
 
 # ============================================================
@@ -208,13 +207,12 @@ cd /tmp
 git clone \
     --depth=1 \
     https://github.com/catppuccin/kde \
-    catppuccin-kde
+    /tmp/catppuccin-kde
 
-cd /tmp/catppuccin-kde
+chmod +x /tmp/catppuccin-kde/install.sh
 
-chmod +x install.sh
-
-su - "$Username" -c './install.sh 1 13 2 auto'
+su - "$Username" -c \
+    'cd /tmp/catppuccin-kde && ./install.sh 1 13 2 auto'
 
 
 # ============================================================
@@ -240,9 +238,6 @@ if [[ -f "$PURPUR_ARCHIVE" ]]; then
 
     su - "$Username" -c \
         'dbus-run-session -- lookandfeeltool --list | grep -i purpur || true'
-
-    su - "$Username" -c \
-        'dbus-run-session -- lookandfeeltool -a PurPurNight-Global-6 || true'
 
 else
 
@@ -507,20 +502,13 @@ docker --version
 docker compose version
 
 echo
-echo "===== TIMEZONE ====="
-timedatectl
-
-echo
 echo "===== ZSH ====="
 su - "$Username" -c 'zsh --version'
 su - "$Username" -c 'zsh -lic "echo ZSH_OK"'
 
 echo
-echo "===== PLASMA ====="
-command -v startplasma-x11
-
-dpkg -l | grep -E \
-    '^ii  (kde-plasma-desktop|plasma-desktop|plasma-workspace|plasma-nm|kwin-x11|xorg|sddm|network-manager)'
+echo "===== TIMEZONE ====="
+timedatectl
 
 echo
 echo "===== SDDM ====="
@@ -556,6 +544,14 @@ echo "===== GLOBAL THEMES ====="
 
 su - "$Username" -c \
     "dbus-run-session -- lookandfeeltool --list | grep -Ei 'breeze|mcsur|catppuccin|purpur' || true"
+
+echo
+echo "===== PLASMA ====="
+
+command -v startplasma-x11
+
+dpkg -l | grep -E \
+    '^ii  (kde-plasma-desktop|plasma-desktop|plasma-workspace|plasma-nm|kwin-x11|xorg|sddm|network-manager)'
 
 echo
 echo "=========================================="
